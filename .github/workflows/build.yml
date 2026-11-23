@@ -17,11 +17,17 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Unzip game project
+      - name: Unzip project archive
         run: |
-          ls -la
+          rm -rf game_src
           mkdir -p game_src
-          unzip -o *.zip -d game_src
+          unzip -o "*.zip" -d game_src
+          if [ ! -f "game_src/settings.gradle" ]; then
+            SUBDIR=$(find game_src -maxdepth 2 -name "settings.gradle" -exec dirname {} \; | head -n 1)
+            if [ -n "$SUBDIR" ]; then
+              mv "$SUBDIR"/* game_src/ 2>/dev/null || true
+            fi
+          fi
           ls -la game_src
 
       - name: Set up JDK 17
@@ -30,17 +36,24 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Accept Android SDK licenses
+      - name: Ensure Android SDK and licenses
         run: |
           mkdir -p "$ANDROID_HOME/licenses"
           yes | sdkmanager --licenses > /dev/null 2>&1 || true
+          sdkmanager --install "platform-tools" "platforms;android-34" "build-tools;34.0.0" > /dev/null 2>&1 || true
 
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v4
+      - name: Configure local.properties and Gradle wrapper
+        working-directory: game_src
+        run: |
+          echo "sdk.dir=$ANDROID_HOME" > local.properties
+          if [ ! -f "./gradlew" ]; then
+            gradle wrapper --gradle-version 8.4 --distribution-type bin
+          fi
+          chmod +x ./gradlew
 
       - name: Build Debug APK
         working-directory: game_src
-        run: gradle assembleDebug --stacktrace
+        run: ./gradlew assembleDebug --console=plain --stacktrace
 
       - name: Upload APK artifact
         if: success()
