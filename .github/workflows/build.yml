@@ -36,15 +36,11 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Ensure Android SDK and licenses
+      - name: Configure Android SDK and Gradle wrapper
+        working-directory: game_src
         run: |
           mkdir -p "$ANDROID_HOME/licenses"
           yes | sdkmanager --licenses > /dev/null 2>&1 || true
-          sdkmanager --install "platform-tools" "platforms;android-34" "build-tools;34.0.0" > /dev/null 2>&1 || true
-
-      - name: Configure local.properties and Gradle wrapper
-        working-directory: game_src
-        run: |
           echo "sdk.dir=$ANDROID_HOME" > local.properties
           if [ ! -f "./gradlew" ]; then
             gradle wrapper --gradle-version 8.4 --distribution-type bin
@@ -53,7 +49,15 @@ jobs:
 
       - name: Build Debug APK
         working-directory: game_src
-        run: ./gradlew assembleDebug --console=plain --stacktrace
+        run: |
+          set -o pipefail
+          ./gradlew assembleDebug --console=plain 2>&1 | tee build.log
+          EXIT_CODE=$?
+          if [ $EXIT_CODE -ne 0 ]; then
+            echo "=== ASOSIY XATO QATORLARI ==="
+            grep -E "FAILURE:|Execution failed|error:|Could not|No such file|Plugin .* was not found" build.log | tail -n 25 || true
+          fi
+          exit $EXIT_CODE
 
       - name: Upload APK artifact
         if: success()
