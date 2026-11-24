@@ -1,14 +1,11 @@
 
-name: Jaloliddin Manguberdi Game APK Build
+name: Jaloliddin Manguberdi APK Build
 
 on:
   workflow_dispatch:
   push:
     branches:
       - main
-    paths:
-      - "*.zip"
-      - ".github/workflows/build.yml"
 
 jobs:
   build:
@@ -18,28 +15,25 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Find ZIP file
+      - name: Find ZIP
         run: |
-          ZIP_FILE=$(find . -maxdepth 3 -type f -iname "*.zip" | head -n 1)
+          ZIP_FILE=$(find . -maxdepth 4 -type f -iname "*.zip" | head -n 1)
 
           if [ -z "$ZIP_FILE" ]; then
-            echo "ERROR: ZIP file not found!"
-            find . -maxdepth 3 -type f
+            echo "ERROR: ZIP file not found"
+            find . -maxdepth 4 -type f
             exit 1
           fi
 
-          echo "Found ZIP: $ZIP_FILE"
-          echo "ZIP_FILE=$ZIP_FILE" >> $GITHUB_ENV
+          echo "Found: $ZIP_FILE"
+          echo "ZIP_FILE=$ZIP_FILE" >> "$GITHUB_ENV"
 
-      - name: Extract project
+      - name: Extract ZIP
         run: |
           mkdir -p game
           unzip -o "$ZIP_FILE" -d game
 
-          echo "Project files:"
-          find game -maxdepth 3 -type f | head -100
-
-      - name: Set up JDK 17
+      - name: Set up Java
         uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -47,35 +41,37 @@ jobs:
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
-        with:
-          packages: |
-            platform-tools
-            platforms;android-35
-            build-tools;35.0.0
 
-      - name: Locate Gradle project
+      - name: Install Android packages
         run: |
-          GRADLE_FILE=$(find game -name gradlew -type f | head -n 1)
+          yes | sdkmanager --licenses || true
+          sdkmanager "platform-tools"
+          sdkmanager "platforms;android-35"
+          sdkmanager "build-tools;35.0.0"
+
+      - name: Find Gradle project
+        run: |
+          GRADLE_FILE=$(find game -type f -name gradlew | head -n 1)
 
           if [ -z "$GRADLE_FILE" ]; then
-            echo "ERROR: gradlew not found!"
+            echo "ERROR: gradlew not found in ZIP"
+            find game -maxdepth 4 -type f
             exit 1
           fi
 
           PROJECT_DIR=$(dirname "$GRADLE_FILE")
-          echo "PROJECT_DIR=$PROJECT_DIR" >> $GITHUB_ENV
+          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
 
-      - name: Build Debug APK
+      - name: Build APK
         run: |
           cd "$PROJECT_DIR"
           chmod +x gradlew
-          ./gradlew assembleDebug --stacktrace
+          ./gradlew assembleDebug --no-daemon --stacktrace
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: Jaloliddin-Manguberdi-APK
-          path: |
-            game/**/build/outputs/apk/debug/*.apk
+          path: game/**/build/outputs/apk/debug/*.apk
           if-no-files-found: error
           retention-days: 14
